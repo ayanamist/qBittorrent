@@ -28,7 +28,34 @@
 
 #include "nativetorrentextension.h"
 
+#include <libtorrent/error_code.hpp>
+#include <libtorrent/peer_connection_handle.hpp>
 #include <libtorrent/torrent_status.hpp>
+
+namespace
+{
+    class IncomingPeerExtension final : public lt::peer_plugin
+    {
+    public:
+        explicit IncomingPeerExtension(const lt::peer_connection_handle &peer)
+            : m_peer {peer}
+        {
+        }
+
+    private:
+        bool on_handshake(lt::span<const char>) override
+        {
+            const auto &peerID = m_peer.pid();
+            // Rasterbar libtorrent uses the peer ID format -LTxxxx-.
+            if ((peerID[0] == '-') && (peerID[1] == 'L') && (peerID[2] == 'T') && (peerID[7] == '-'))
+                m_peer.disconnect(lt::errors::peer_banned, lt::operation_t::bittorrent);
+
+            return false;
+        }
+
+        lt::peer_connection_handle m_peer;
+    };
+}
 
 NativeTorrentExtension::NativeTorrentExtension(const lt::torrent_handle &torrentHandle, ExtensionData *data)
     : m_torrentHandle {torrentHandle}
@@ -49,6 +76,14 @@ NativeTorrentExtension::NativeTorrentExtension(const lt::torrent_handle &torrent
 NativeTorrentExtension::~NativeTorrentExtension()
 {
     delete m_data;
+}
+
+std::shared_ptr<lt::peer_plugin> NativeTorrentExtension::new_connection(const lt::peer_connection_handle &peer)
+{
+    if (peer.is_outgoing())
+        return {};
+
+    return std::make_shared<IncomingPeerExtension>(peer);
 }
 
 void NativeTorrentExtension::on_state(const lt::torrent_status::state_t state)

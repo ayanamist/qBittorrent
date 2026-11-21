@@ -40,6 +40,7 @@ public:
     ~NativeTorrentExtension();
 
 private:
+    std::shared_ptr<lt::peer_plugin> new_connection(const lt::peer_connection_handle &peer) override;
     void on_state(lt::torrent_status::state_t state) override;
 
     lt::torrent_handle m_torrentHandle;
